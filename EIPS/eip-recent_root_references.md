@@ -1,396 +1,251 @@
 ---
 eip: TBD
-title: Recent Root References for Frame Transactions
-description: References to recent roots written to a system contract
+title: FOCIL Eligibility Profile
+description: Five-class FOCIL eligibility profile across legacy, AA, private-AA, and witness-bearing frame transactions
 author: Thomas Thiery (@soispoke)
 discussions-to: TBD
 status: Draft
 type: Standards Track
 category: Core
 created: 2026-05-15
-requires: 8141
+requires: 7805, 7928, 8141
 ---
 
 ## Abstract
 
-Adds recent root references to EIP-8141 frame transactions.
-
-A root source is one named sequence of recent roots. The source address chooses a salt, writes one root at a time, and the resulting roots are keyed by slot. A frame transaction may declare recent root references of the form:
-
-```text
-(source_id, slot, root)
-```
-
-Before a frame transaction runs, clients check each reference against the state immediately before that transaction. The check succeeds only if the named root is stored for the named source and slot, and the slot is still recent. Validation code can then read the verified reference through transaction introspection.
+Defines five FOCIL eligibility classes that span the non-blob transaction types Ethereum is shipping: legacy and EIP-7702 transactions (Class 1), AA frame transactions (Class 2), AA frame transactions with keyed nonces for privacy protocols (Class 3), frame transactions that carry bounded storage witnesses for state outside AA-VOPS (Class 4), and transactions that are not FOCIL-eligible including blob transactions (Class 5). Class 1 reads the VOPS schema (`address`, `nonce`, `balance`, `codeFlag`) from the [VOPS proposal](https://ethresear.ch/t/a-pragmatic-path-towards-validity-only-partial-statelessness-vops/22236); Classes 2-4 extend it with bounded AA-VOPS state, keyed nonces, recent root references, and witnesses. For each FOCIL-eligible class the EIP specifies the validation reads, eligibility conditions, per-IL VERIFY budget, and index-based omission check. Mempool admission and FOCIL eligibility are treated as separate policies.
 
 ## Motivation
 
-EIP-8141 validation must not read arbitrary third-party mutable storage in the public mempool. Some validation rules still need to depend on recent roots, such as privacy tree roots, wallet authorization roots, or account validation roots.
-
-Recent root references let a transaction explicitly name one recent root in its signed payload. Each reference maps to one system-contract storage key and can be checked before validation code runs.
-
-Privacy protocols often keep a tree of commitments and prove spends against a recent tree root. With this EIP, the protocol writes a root for a completed slot, and spend transactions reference that root directly instead of reading the protocol's changing tree state during validation.
+FOCIL enforces inclusion when an includer can list a transaction and an attester can later check that omission was unjustified. As Ethereum adds frame transactions, keyed nonces, recent root references, and witness-bearing validation, FOCIL's public validity surface fragments unless the eligibility rules are unified. This EIP defines the rules once, ties each new transaction type to a bounded validation surface, and makes the per-class FOCIL guarantee explicit.
 
 ## Specification
 
-The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL NOT", "SHOULD", "SHOULD NOT", "RECOMMENDED", "NOT RECOMMENDED", "MAY", and "OPTIONAL" in this document are to be interpreted as described in RFC 2119 and RFC 8174.
+The key words "MUST", "MUST NOT", "REQUIRED", "SHOULD", and "MAY" are to be interpreted as described in RFC 2119 and RFC 8174.
 
-This specification is a delta against EIP-8141. Terms not defined here, including `FrameTx`, `FRAME_TX_TYPE`, `VERIFY`, `EXPIRY_VERIFIER`, frame modes, and `TXPARAM`, have the meanings defined in EIP-8141.
+This specification requires [EIP-7805](./eip-7805.md), [EIP-7928](./eip-7928.md), [EIP-8141](./eip-8141.md), the Keyed Nonces frame-transaction extension ([[drafts/keyed-nonces/eip-draft]]), and the Recent Root References frame-transaction extension ([[drafts/recent-root-references/eip-draft|Recent Root References]]).
+
+### Mempool eligibility and FOCIL eligibility are separate policies
+
+Public mempool admission and FOCIL eligibility apply different rules to the same transaction:
+
+```text
+public-mempool admission:
+  gossip-layer policy
+  conservative VERIFY simulation cap to protect node resources
+  not consensus
+
+FOCIL eligibility:
+  protocol-level inclusion guarantee
+  per-IL VERIFY budget specified here
+  enforced by attesters via the omission check
+```
+
+A transaction MAY be public-mempool-admissible without being FOCIL-eligible (Class 5 reaches builders but FOCIL does not enforce inclusion). A transaction MAY be FOCIL-eligible without being public-mempool-admissible (custom mempool or direct submission, see §[Includer admission](#includer-admission)). Includers listing FOCIL-eligible transactions MUST NOT rely on default-mempool admission as a precondition.
 
 ### Constants
 
-| Name                                 |                                                                            Value |
-| ------------------------------------ | -------------------------------------------------------------------------------: |
-| `FORK_TIMESTAMP`                     |                                                                            `TBD` |
-| `RECENT_ROOT_ADDRESS`                 |                                                                            `TBD` |
-| `RECENT_ROOT_CODE`                    |                                                                            `TBD` |
-| `RECENT_ROOT_LENGTH`                  |                                                                           `8192` |
-| `RECENT_ROOT_USABLE_WINDOW`           |                                                                           `8191` |
-| `MAX_RECENT_ROOT_REFERENCES`          |                                                                             `16` |
-| `RECENT_ROOT_ENTRY_DOMAIN`            |                                                  `keccak256("RECENT_ROOT_ENTRY")` |
-| `RECENT_ROOT_SOURCE_DOMAIN`           |                                                 `keccak256("RECENT_ROOT_SOURCE")` |
-| `RECENT_ROOT_STORAGE_DOMAIN`          |                                                `keccak256("RECENT_ROOT_STORAGE")` |
-| `RECENT_ROOT_REFERENCE_ADDRESS_GAS`   |                                                       `ACCESS_LIST_ADDRESS_COST` |
-| `RECENT_ROOT_REFERENCE_GAS`           | `ACCESS_LIST_STORAGE_KEY_COST + 2 * KECCAK256_BASE_GAS + 7 * KECCAK256_WORD_GAS` |
-| `TXPARAM_RECENT_ROOT_REFERENCE_COUNT` |                                                                           `0x0D` |
-| `RECENTROOTREFLOAD`                   |                                                                           `0xB4` |
-| `RECENTROOTREFLOAD_GAS`               |                                                                              `3` |
+| Name | Value |
+|---|---:|
+| `MAX_VERIFY_GAS_PER_IL` | `2**20` |
+| `MAX_VERIFY_GAS_PER_TX` | `TBD` |
+| `AA_VOPS_SLOT_COUNT` | `4` |
+| `MAX_WITNESS_BYTES_PER_TX` | `TBD` |
+| `MAX_WITNESSED_READS_PER_TX` | `TBD` |
 
-All concatenations below use fixed-length encodings. Domains are 32 bytes. Addresses are 20 bytes. Slots and indices are unsigned 64-bit big-endian integers. Roots, salts, source identifiers, entry hashes, and storage keys are 32 bytes.
+`MAX_VERIFY_GAS_PER_TX` MAY differ from any default public-mempool simulation cap; the two are independent policies (see above).
 
-### Current slot
+### Eligibility classes
 
-For block validation:
+A transaction belongs to exactly one of the following FOCIL classes:
 
-```text
-current_slot = floor((block.timestamp - CONSENSUS_GENESIS_TIME) / SECONDS_PER_SLOT)
-```
+| Class | Transaction shape | Adds to validation reads |
+|---|---|---|
+| 1: VOPS (pre-AA) | Non-frame, non-blob transactions (legacy / 2930 / 1559 / 7702) | — |
+| 2: AA-VOPS (post-AA) | EIP-8141 frame tx, `nonce_key == 0` | storage slots, code, recent root references |
+| 3: Private AA-VOPS | EIP-8141 frame tx, `nonce_key != 0`, `nonce_seq == 0` | keyed-nonce state |
+| 4: Witness-profile | Class 2 or 3 with declared storage witnesses | bounded witnesses and BAL-derived freshness checks |
+| 5: Not FOCIL-eligible | Blob transactions (EIP-4844 / type 3) and any other ineligible transaction | (FOCIL does not enforce) |
 
-`CONSENSUS_GENESIS_TIME` and `SECONDS_PER_SLOT` are chain configuration values exposed to execution clients.
+Blob transactions are excluded by design: blob scheduling is governed by a separate target/max blob-count mechanism that does not compose with inclusion-list enforcement. Coupling blob slots to FOCIL would tie two independent scheduling regimes.
 
-For transaction pool handling, `current_slot` is the node's current slot at receipt, recheck, or eviction time. It is local policy, not block validity.
+Classes 1-4 are FOCIL-eligible. This EIP specifies the validation rules, validation reads, and budgets for each. Class 5 transactions are not FOCIL-enforced; the builder MAY include them under normal block-construction rules and any FOCIL omission of them is excused.
 
-References MUST target completed slots. A root written during slot `S` becomes referenceable beginning in slot `S + 1`.
+### Class 1: VOPS (pre-AA)
 
-### Root sources
+A transaction is Class 1 eligible if all of the following hold:
 
-A root source is identified by:
+1. It is a valid post-fork non-frame, non-blob transaction (legacy, EIP-2930, EIP-1559, or EIP-7702).
+2. Its signature validates against the recovered sender.
+3. `sender.nonce == tx.nonce` at the claimed block index.
+4. `sender.balance >= tx.max_fee_per_gas * tx.gas_limit + tx.value` at the claimed block index.
+5. `tx.chain_id` matches.
 
-```text
-source_id = keccak256(RECENT_ROOT_SOURCE_DOMAIN || source_address || salt)
-```
+Validation reads (VOPS state, per [the VOPS proposal](https://ethresear.ch/t/a-pragmatic-path-towards-validity-only-partial-statelessness-vops/22236)): `address`, `nonce`, `balance`, `codeFlag` for `sender` and `payer` (if distinct).
 
-where `source_address` is an address and `salt` is a `bytes32` value.
+Class 1 transactions do not consume `MAX_VERIFY_GAS_PER_IL`. Their validation work is bounded by the signature check and the VOPS-field read.
 
-The source address MAY be an externally owned account or a contract, and MAY use multiple root sources by using different salts. Protocols relying on a root source are responsible for write authority and salt allocation.
+For senders with `codeFlag == 1` (EIP-7702 delegated accounts), the per-IL constraint described under [Includer admission](#includer-admission) restricts to at most one pending Class 1 transaction per `sender` per inclusion list, to prevent nonce or balance conflicts within the IL.
 
-### Entry and storage keys
+### Class 2: AA-VOPS (post-AA)
 
-The committed entry for `(source_id, slot, root)` is:
+A transaction is Class 2 eligible if all of the following hold:
 
-```text
-entry_hash = keccak256(
-    RECENT_ROOT_ENTRY_DOMAIN ||
-    source_id ||
-    uint64_be(slot) ||
-    root
-)
-```
+1. It is a valid post-fork EIP-8141 frame transaction with `nonce_key == 0`.
+2. Its leading validation prefix contains only `VERIFY` frames before the first non-`VERIFY` frame.
+3. The validation prefix executes a payment-scoped `APPROVE`.
+4. The validation prefix reads only Class 2 state.
+5. The validation prefix consumes no more than `MAX_VERIFY_GAS_PER_TX`.
 
-The storage key for index `i` is:
+Class 2 validation reads (AA-VOPS state, extending the VOPS schema):
 
-```text
-storage_key = keccak256(
-    RECENT_ROOT_STORAGE_DOMAIN ||
-    source_id ||
-    uint64_be(i)
-)
-```
+- VOPS fields (`address`, `nonce`, `balance`, `codeFlag`) for `sender` and `payer`;
+- code for `sender` and `payer`, resolved through the account `codeHash` or equivalent code identifier if that identifier is not already part of the VOPS account record;
+- the first `AA_VOPS_SLOT_COUNT` storage slot values of `sender` and `payer`, if those slots are declared by the transaction and held in AA-VOPS;
+- `storageRoot` only when a declared slot value is supplied or checked by proof rather than already held in AA-VOPS;
+- precompiles and constants needed to verify validation logic;
+- recent root references per [[drafts/recent-root-references/eip-draft|Recent Root References]].
 
-Each root source has a conceptual array:
+Any other dynamic storage read makes the transaction ineligible under Class 2.
 
-```text
-entries: bytes32[RECENT_ROOT_LENGTH]
-```
+### Class 3: AA-VOPS for private frame transactions
 
-`entries[i]` is stored at `RECENT_ROOT_ADDRESS[storage_key]`. All entries are initially zero.
+A transaction is Class 3 eligible if all of the following hold:
 
-Each root source uses at most `RECENT_ROOT_LENGTH` storage keys. The global storage footprint is `RECENT_ROOT_LENGTH` keys per written `source_id`.
+1. It is a valid post-fork EIP-8141 frame transaction.
+2. It uses `nonce_key != 0` and `nonce_seq == 0`.
+3. Its leading validation prefix contains only `VERIFY` frames before the first non-`VERIFY` frame.
+4. The validation prefix executes a payment-scoped `APPROVE`.
+5. A spend-authorizing proof, or a proof sufficient to authorize the selected `nonce_key`, is verified before that `APPROVE`.
+6. The selected keyed nonce is consumed by that `APPROVE`.
+7. The validation prefix reads only Class 3 state.
+8. The validation prefix consumes no more than `MAX_VERIFY_GAS_PER_TX`.
 
-### Recent root contract
+Class 3 validation reads:
 
-At activation, clients MUST install the recent root system contract at `RECENT_ROOT_ADDRESS`.
+- all Class 2 reads (including recent root references for the privacy protocol's commitment-tree root and any related recent-root dependencies);
+- keyed-nonce state for `(sender, nonce_key)`.
 
-The contract accepts one write operation with 64 bytes of calldata:
+The privacy protocol's ordinary execution state (commitment-tree internals, nullifier mappings, arbitrary privacy-contract storage) MUST NOT be read during the validation prefix.
 
-```text
-salt: bytes32
-root: bytes32
-```
+The selected `nonce_key` SHOULD be a domain-separated value bound to the privacy protocol's nullifier or equivalent single-use spend identifier.
 
-Bytes `0..31` are `salt`. Bytes `32..63` are `root`.
+### Class 4: Witness-profile
 
-Calls with any other calldata length MUST revert. Calls with nonzero call value MUST revert.
+A transaction is Class 4 eligible if it satisfies the structural conditions of Class 2 or Class 3 AND brings bounded storage witnesses for every validation read outside Class 2/3 state. Witnesses MUST satisfy:
 
-A call made in static context MUST fail according to normal EVM static-context rules. Implementations MUST NOT allow recent root storage to change in static context.
+1. The number of witnessed reads is at most `MAX_WITNESSED_READS_PER_TX`.
+2. The total witness byte size is at most `MAX_WITNESS_BYTES_PER_TX`.
+3. Each witness proves inclusion against a state root that is itself either a recent root reference (per [[drafts/recent-root-references/eip-draft|Recent Root References]]) or a system-level historical state root pinned to a specific block `N`.
+4. Witnessed values MUST NOT determine further validation reads; the read set is fully declared up front.
+5. Witness verification cost is accounted in the validation prefix gas total.
+6. The transaction declares its outside-VOPS dependencies as a list `D` of `(address, storage_key)` pairs covered by the witness. The witness is pinned to a specific block `N`. The transaction is freshness-admissible only if `last_touched(d) <= N` for every `d in D`, where `last_touched` is the most recent block at which `d` was written, derived from BAL write history for blocks `N+1` through the current head.
 
-The source address is the immediate EVM caller of `RECENT_ROOT_ADDRESS`.
+Class 4 validation reads: Class 2 or Class 3 reads (depending on whether `nonce_key == 0` or `!= 0`), plus the declared witnessed reads.
 
-The write operation is only performed when the recent root code executes as `RECENT_ROOT_ADDRESS`. A `DELEGATECALL` or `CALLCODE` to the recent root code MUST NOT modify recent root state.
+The freshness check in condition 6 is independent of the cryptographic witness verification (which remains stable against the historical root). Mempool nodes maintain a rolling inverted index `last_touched[(address, storage_key)] -> block` over recent BAL-derived writes; freshness lookup is O(1) per declared dependency. The depth of the retained write-history window caps the maximum admissible witness age. BALs can help a node follow written entries forward at the head, but they do not supply values for unmodified state and do not by themselves provide rollback data. When a tracked dependency is touched by a newly accepted block, the affected pending transaction is not silently revalidated by the mempool: the wallet MUST regenerate the witness against a more recent anchor and re-sign the envelope, or the transaction is evicted.
 
-When called during slot `S` by `caller`, the contract computes:
+### Class 5: Not FOCIL-eligible
 
-```text
-source_address = caller
-source_id = keccak256(RECENT_ROOT_SOURCE_DOMAIN || source_address || salt)
-i = S mod RECENT_ROOT_LENGTH
-entry_hash = keccak256(
-    RECENT_ROOT_ENTRY_DOMAIN ||
-    source_id ||
-    uint64_be(S) ||
-    root
-)
-storage_key = keccak256(
-    RECENT_ROOT_STORAGE_DOMAIN ||
-    source_id ||
-    uint64_be(i)
-)
-```
+The following are not FOCIL-eligible under this profile:
 
-and sets:
+- Blob transactions (EIP-4844, type 3). Blob scheduling is governed by separate target / max blob-count limits and does not compose with FOCIL inclusion-list enforcement.
+- Any transaction that fails the eligibility conditions of Classes 1-4 (arbitrary state reads outside the allowed surface, exceeds `MAX_VERIFY_GAS_PER_TX`, non-deterministic validation, etc.).
 
-```text
-storage[storage_key] = entry_hash
-```
+The builder MAY include Class 5 transactions under normal block-construction rules. FOCIL does not enforce their inclusion and any FOCIL omission of them is excused.
 
-The call follows normal EVM execution and gas accounting. A successful call returns zero bytes. The contract exposes no read operation.
+### Includer admission
 
-Each `(source_id, S)` has at most one referenceable root on the canonical chain. Multiple writes by the same source address and salt during slot `S` target the same storage key. If multiple writes are included, the final write in canonical block execution order overwrites earlier writes. Only that final root is referenceable beginning in slot `S + 1`. Applications MUST treat in-slot announcements as tentative until the slot is complete.
+A FOCIL includer MAY include a Class 1-4 eligible transaction from any submission path: default public mempool, custom mempool (for example a privacy mempool that carries Class 3 transactions), or direct submission. A transaction does not need default-mempool admission to be FOCIL-eligible.
 
-### Transaction payload
+For each inclusion list, the includer processes Class 2-4 eligible transactions in list order. The sum of validation-prefix gas for Class 2-4 eligible transactions in one inclusion list MUST NOT exceed `MAX_VERIFY_GAS_PER_IL`. Class 1 transactions do not consume from `MAX_VERIFY_GAS_PER_IL`.
 
-The pre-fork EIP-8141 frame-transaction payload has eight fields:
+For senders with `codeFlag == 1` (EIP-7702 delegated accounts), at most one Class 1 transaction per `sender` MAY appear in a given inclusion list. This prevents nonce or balance conflicts among multiple pending transactions from the same delegated account and matches the VOPS-level admission rule. Pure EOAs (`codeFlag == 0`) are not subject to this per-sender per-IL cap.
 
-```text
-[chain_id, nonce, sender, frames,
- max_priority_fee_per_gas, max_fee_per_gas,
- max_fee_per_blob_gas, blob_versioned_hashes]
-```
+A Class 1-4 eligible transaction that exceeds `MAX_VERIFY_GAS_PER_TX` or that does not fit the remaining `MAX_VERIFY_GAS_PER_IL` budget at its IL position is not FOCIL-enforceable.
 
-The post-fork frame-transaction payload becomes:
+### Omission check (index-based)
 
-```text
-[chain_id, nonce, sender, frames,
- max_priority_fee_per_gas, max_fee_per_gas,
- max_fee_per_blob_gas, blob_versioned_hashes,
- recent_root_references]
-```
+For each omitted Class 1-4 eligible transaction, the builder provides a block index at which it claims the transaction was attempted.
 
-where:
+Attesters evaluate state at that index using locally available state plus [[concepts/BAL|EIP-7928]] post-state updates, client state-diff data, or an equivalent authenticated state-diff mechanism. BAL post-state updates can advance written entries forward. Reconstructing earlier values, including across reorgs, requires pre-state diffs or cached pre-values.
+
+An omitted Class 1-4 transaction is an unexcused FOCIL violation only if all of the following hold at the claimed index:
+
+1. the transaction passes static EIP-8141 and fee sanity checks;
+2. all class-specific eligibility conditions hold (Class 2-3: `nonce_key` and proof-before-`APPROVE` structure; Class 3: selected keyed nonce unused; Class 4: declared witnesses match reconstructed roots);
+3. all class-permitted validation reads are available and match the reconstructed state;
+4. the validation prefix (or signature check, for Class 1) succeeds;
+5. the transaction fits the remaining gas, the per-tx VERIFY budget, and the IL VERIFY budget at the claimed index.
+
+Failure of any condition excuses omission. The index-based check is linear in the number of included eligibility checks rather than quadratic in omitted transaction orderings; this is the design basis for `MAX_VERIFY_GAS_PER_IL = 2**20`.
+
+### AA-VOPS state profile
+
+The minimal cumulative state required to serve FOCIL eligibility for Classes 1-4 is:
 
 ```text
-recent_root_references = [[source_id, slot, root], ...]
+VOPS baseline (Class 1):
+  address, nonce, balance, codeFlag
+    for any FOCIL-eligible sender or payer
+
+AA-VOPS extension (Classes 2-4):
+  + code for any contract used as sender or payer
+  + codeHash or equivalent code identifier, if not already present
+    in the VOPS account record used to authenticate that code
+  + first AA_VOPS_SLOT_COUNT storage slot values of any such account,
+    where slots are declared by the transaction
+  + storageRoot only when declared slot values are supplied or checked by proof
+  + keyed-nonce state (system contract, for Class 3)
+  + recent root state for any source identifier that may be referenced
+  + small pending-conflict overlays
+
+Recent update and freshness history:
+  + rolling last_touched[(address, storage_key)] -> block index,
+    derived from recent BAL writes, for Class 4 witness freshness
+  + optional BAL-derived post-state updates for written VOPS / AA-VOPS entries
+  + rollback data from client state diffs or cached pre-values
 ```
 
-`recent_root_references` MUST be an RLP list. Each item MUST be an RLP list of exactly three elements. `source_id` MUST be a byte string of length 32. `slot` MUST be a canonical RLP integer satisfying `slot < 2**64`. `root` MUST be a byte string of length 32. The protocol treats `root` as opaque bytes; applications define what it commits to. The number of references MUST NOT exceed `MAX_RECENT_ROOT_REFERENCES`.
+The VOPS schema (4 fields per account, ~40 bytes) is the baseline. AA-VOPS adds bounded storage-slot values and code, keeping the state surface small while supporting frame-transaction validation. Witness-profile transactions (Class 4) reach state outside AA-VOPS only through the witnesses they carry; AA-VOPS nodes verify the witness against the referenced root and use recent BAL-derived write history to reject stale witnesses.
 
-The `slot` field is a slot number, not a timestamp or block number.
+BAL-derived history is a freshness and head-tracking aid, not arbitrary state storage. It covers recent writes, and any touched-key metadata a BAL exposes; state that was not modified does not appear with a value and must be supplied from held AA-VOPS state or from a witness. A node that updates local AA-VOPS state from BAL post-state values MUST retain enough pre-state information, either through the execution client's normal state-diff machinery or by caching pre-values before overwriting, to roll back across reorgs.
 
-The frame layout and frame execution rules are otherwise unchanged. `recent_root_references` is a top-level transaction field and is included in `compute_sig_hash(tx)`.
+AA-VOPS nodes are not required to store full privacy-protocol state, full nullifier sets, full commitment trees, or arbitrary contract storage. Partial-statelessness nodes that hold additional storage (per the VOPS proposal's AA-VOPS variant) are a superset and remain compatible.
 
-The post-fork signature hash follows EIP-8141 over the nine-field payload:
+### Engine API
 
-```python
-def compute_sig_hash(tx: FrameTx) -> Hash:
-    for i, frame in enumerate(tx.frames):
-        if frame.mode == VERIFY and frame.target != EXPIRY_VERIFIER:
-            tx.frames[i].data = Bytes()
-    return keccak(bytes([FRAME_TX_TYPE]) + rlp(tx))
-```
-
-where `rlp(tx)` is the post-fork nine-field payload. `recent_root_references` is not elided by the VERIFY-frame data elision rule.
-
-Frame data, including VERIFY frame data, MUST NOT add, remove, or modify the transaction's recent root reference set.
-
-### Static validity
-
-Decoders MUST reject a post-fork frame transaction if any of the following is true:
-
-* the payload does not match the post-fork schema;
-* `recent_root_references` is not an RLP list;
-* `len(recent_root_references) > MAX_RECENT_ROOT_REFERENCES`;
-* any reference is not an RLP list of exactly three elements;
-* any `source_id` is not a byte string of length 32;
-* any `slot` is not a canonical RLP integer or satisfies `slot >= 2**64`;
-* any `root` is not a byte string of length 32.
-
-### Reference validity
-
-Within block execution, recent root references are checked after the EIP-8141 nonce check and before frame execution, against the transaction pre-state. The transaction pre-state includes all prior transactions in the same block.
-
-Competing blocks at the same slot may have different recent-root state, and a reference is valid only in a block whose transaction pre-state contains the referenced entry. `current_slot` is derived from that block's timestamp.
-
-A recent root reference `(source_id, slot, root)` is valid only if:
-
-```text
-1 <= current_slot - slot <= RECENT_ROOT_USABLE_WINDOW
-i = slot mod RECENT_ROOT_LENGTH
-entry_hash = keccak256(
-    RECENT_ROOT_ENTRY_DOMAIN ||
-    source_id ||
-    uint64_be(slot) ||
-    root
-)
-storage_key = keccak256(
-    RECENT_ROOT_STORAGE_DOMAIN ||
-    source_id ||
-    uint64_be(i)
-)
-RECENT_ROOT_ADDRESS[storage_key] == entry_hash
-```
-
-If any reference is invalid, the transaction is invalid and no frame is executed. A block containing such a transaction is invalid.
-
-Duplicate references are valid. They are checked, charged, and preserved independently. Accessed address and storage-key sets deduplicate normally.
-
-Each valid reference MUST add `RECENT_ROOT_ADDRESS` and its `storage_key` to the transaction's accessed address and storage-key sets. This affects warm/cold gas accounting only.
-
-For FOCIL omission checks, attesters evaluate recent root references against the reconstructed pre-state at the claimed transaction index in the claimed block, using `current_slot` from that block's timestamp.
-
-### Access lists and witnesses
-
-Recent root writes are ordinary writes to `RECENT_ROOT_ADDRESS[storage_key]`. Block access lists, state-diff sidecars, witness profiles, and attester reconstruction mechanisms MUST represent them as ordinary storage writes.
-
-### Gas accounting
-
-For post-fork frame transactions, the EIP-8141 gas-limit formula is modified to include recent root references:
-
-```text
-tx_gas_limit =
-    FRAME_TX_INTRINSIC_COST
-    + len(tx.frames) * FRAME_TX_PER_FRAME_COST
-    + calldata_cost(recent_root_calldata)
-    + recent_root_reference_intrinsic_gas
-    + sum(frame.gas_limit for all frames)
-```
-
-where:
-
-```text
-recent_root_reference_intrinsic_gas =
-    0
-        if len(recent_root_references) == 0
-    RECENT_ROOT_REFERENCE_ADDRESS_GAS
-        + len(recent_root_references) * RECENT_ROOT_REFERENCE_GAS
-        otherwise
-```
-
-and:
-
-```text
-recent_root_calldata = rlp(tx.frames) || rlp(recent_root_references)
-```
-
-The EIP-7623 calldata cost MUST be computed over `recent_root_calldata` as one byte string.
-
-`RECENT_ROOT_REFERENCE_GAS` covers one declared storage key and the two Keccak computations used to derive `storage_key` and `entry_hash`.
-
-### TXPARAM and RECENTROOTREFLOAD
-
-One new `TXPARAM` index and one new opcode are added:
-
-| Name                                 |  Value | Return value                 |
-| ------------------------------------ | -----: | ---------------------------- |
-| `TXPARAM_RECENT_ROOT_REFERENCE_COUNT` | `0x0D` | `len(recent_root_references)` |
-
-`TXPARAM(TXPARAM_RECENT_ROOT_REFERENCE_COUNT)` costs the standard `TXPARAM` gas.
-
-`RECENTROOTREFLOAD` pops two stack items:
-
-```text
-field
-index
-```
-
-where `field` is the top stack item and `index` is the second stack item. It pushes one word from `recent_root_references[index]`:
-
-| `field` | Return value                               |
-| ------: | ------------------------------------------ |
-|     `0` | `source_id`                                 |
-|     `1` | `slot`, as a zero-extended 256-bit integer |
-|     `2` | `root`                                     |
-
-`RECENTROOTREFLOAD` costs `RECENTROOTREFLOAD_GAS`. It MUST exceptional-halt if `index >= len(recent_root_references)` or `field > 2`.
-
-`RECENTROOTREFLOAD` reads only signed transaction-envelope data. It does not read recent root contract storage. It MAY be used in any frame mode, including VERIFY frames.
-
-### Public mempool handling
-
-Recent root storage is not exposed to validation code through EVM execution. During public mempool validation, recent root state may affect a transaction only through pre-execution reference checks and signed reference roots exposed by introspection.
-
-Nodes SHOULD admit a transaction to the public pool only if all declared recent root references are valid against the node's current head.
-
-Nodes SHOULD NOT admit a transaction while any reference has `slot >= current_slot`. Nodes MAY evict a transaction with any reference where `current_slot - slot >= RECENT_ROOT_LENGTH`.
-
-Nodes SHOULD recheck pending transactions with recent root references when the head changes, when the node's current slot advances, or after any reorg that may affect referenced entries.
-
-Public-pool and FOCIL policies MAY require a larger minimum reference age than consensus validity. `current_slot - 1` references are consensus-valid but have the weakest propagation and reorg stability.
-
-### Activation
-
-This EIP MUST activate at or after EIP-8141.
-
-If `timestamp < FORK_TIMESTAMP`, clients MUST apply the pre-fork EIP-8141 `FRAME_TX_TYPE` schema and MUST NOT apply recent root logic.
-
-If `timestamp >= FORK_TIMESTAMP`, clients MUST apply the post-fork `FRAME_TX_TYPE` schema defined in this EIP.
-
-At activation, on the first execution payload with `timestamp >= FORK_TIMESTAMP` and before any transaction in that payload runs, clients MUST initialize `RECENT_ROOT_ADDRESS` with `RECENT_ROOT_CODE`, nonce 1, and empty storage, preserving any pre-existing balance.
-
-If `RECENT_ROOT_ADDRESS` does not exist, clients MUST create it with balance 0, nonce 1, code `RECENT_ROOT_CODE`, and empty storage.
-
-If `RECENT_ROOT_ADDRESS` already exists with empty code and empty storage, clients MUST set its code to `RECENT_ROOT_CODE`, set its nonce to `max(existing_nonce, 1)`, preserve its balance, and leave storage empty.
-
-The fork configuration MUST choose a `RECENT_ROOT_ADDRESS` with empty code and empty storage in the parent state of the first post-fork payload. If this condition is false at activation, the payload is invalid.
-
-This initialization runs exactly once at fork activation and MUST NOT be re-applied during normal chain progression after activation. Clients MUST handle reorgs across the fork boundary by applying or undoing this transition according to the canonical chain.
-
-Pre-fork frame transactions and authorizations bound to the pre-fork canonical signature hash do not survive the boundary and MUST be evicted from mempools and regenerated.
+The execution layer MUST receive enough ordered inclusion-list data through `newPayload` and `forkchoiceUpdated` to perform the per-class eligibility check at any claimed block index and to return omission-excuse information. The exact Engine API extensions are left to the FOCIL integration EIP.
 
 ## Rationale
 
-EIP-8141 validation needs stable, statically declared dependencies. General third-party storage reads are unsafe for the public mempool because one mutable cell can invalidate many pending transactions.
+A unified eligibility profile across transaction types prevents validation drift between includers, attesters, and partial-state nodes. Naming five distinct classes makes the public validity surface explicit: legacy transactions occupy the smallest surface, witness-bearing transactions the largest, and everything in between binds to AA-VOPS plus the named restricted state types (keyed nonces, recent root references).
 
-Recent root references provide a narrow exception. The dependency is signed in the transaction envelope, checked before validation code runs, and exposed only through introspection. Recent root references are intentionally narrow: each reference names one recent `bytes32` root and one system-contract storage key.
+Separating mempool admission from FOCIL eligibility lets the default public mempool stay conservative (small simulation cap, gossip resource protection) while FOCIL continues to enforce inclusion for Classes 1-4 through any submission path. Privacy protocols use this separation in particular: a privacy mempool can carry Class 3 transactions that exceed the default mempool's cap, and FOCIL still enforces inclusion via the per-IL budget.
 
-Each stored entry commits to the root source, slot, and root. This prevents an old root at the same ring index, or a root from another root source, from satisfying a reference.
+The `2**20` per-IL VERIFY budget follows the index-based FOCIL-AA design: attester work is linear in the number of included eligibility checks rather than quadratic in omitted transaction orderings. The value is large enough for proof-heavy privacy validation while remaining bounded at the inclusion-list layer.
 
-References are limited to completed slots. During slot `S`, writes update index `S mod RECENT_ROOT_LENGTH`, but references to `S` are invalid and references old enough to share that index are expired. Current-slot writes therefore cannot invalidate currently valid references.
-
-No creation transaction is required. A root source is created implicitly when a source address first writes with a new `(source_address, salt)` pair. Each root source has a bounded rolling window. Aggregate storage grows linearly with the number of written root sources. State growth is paid incrementally by the writes that create storage entries.
-
-For VOPS-style validation, each declared reference names exactly one storage key under `RECENT_ROOT_ADDRESS`.
-
-`RECENT_ROOT_LENGTH = 8192` gives `RECENT_ROOT_USABLE_WINDOW = 8191`, because the current slot is not referenceable.
-
-`MAX_RECENT_ROOT_REFERENCES = 16` bounds pre-execution reference checks while covering the expected root set for privacy, wallet authorization, and historical-state-root use cases.
-
-## Backwards Compatibility
-
-This EIP does not modify EIP-7702 or other transaction types. An EIP-7702-delegated EOA may be a source address; `source_id` is derived from the caller of the write call.
-
-References to slots before this EIP's activation are not satisfiable because recent root storage is empty at activation.
+Witness-profile eligibility extends FOCIL beyond the AA-VOPS surface without forcing every includer or attester to hold arbitrary state. The witness format and verification work are bounded; the witness's state root MUST be itself a FOCIL-checkable object (recent root reference or system-level historical root) so attesters can verify witnesses without trust.
 
 ## Security Considerations
 
-The protocol treats `root` as an opaque `bytes32`. Applications define what it commits to and MUST bind the expected `source_id`, slot window, and root in their validation logic. For example, a privacy proof using root `R` should include `(source_id, slot, R)` or an application-specific commitment to those fields as a public input, and validation logic MUST check the same tuple through `RECENTROOTREFLOAD`.
+Class boundaries are validity conditions, not optimizations. A transaction that claims a class but reads state outside that class's surface is not FOCIL-enforced under this profile, and its omission is excused.
 
-Each `(source_id, slot)` has one referenceable root on the canonical chain. The referenceable root is last-write-wins according to canonical execution order and is finalized with the containing block. A protocol that needs multiple roots from the same slot SHOULD write an aggregate commitment.
+For Class 3, applications MUST bind the spend-authorizing proof to at least the sender, `nonce_key`, `nonce_seq == 0`, chain ID, and the relevant frame commitment. A stale recent root is valid only while its recent root reference remains inside the buffer's window; larger windows improve propagation tolerance but increase revocation latency and stale-root surface.
 
-This EIP does not guarantee inclusion of root writes. Applications that rely on timely root publication need their own publication path, redundant root sources, or an inclusion policy for write transactions.
+For Class 4, witnesses that depend on unconfirmed state roots are not FOCIL-enforced: the referenced root MUST be a finalized recent root entry or a system historical root. Witness-bearing transactions that allow witnessed values to direct further reads are not eligible; the read set MUST be fully declared up front to keep attester work bounded.
 
-The same `(source_address, salt)` pair produces the same `source_id` on different chains, but each chain maintains independent recent root state. Proofs, bridge messages, and offchain attestations that carry recent root references MUST bind the intended chain domain outside the tuple.
+Class 4 freshness depends on the BAL retention window the mempool node maintains. A witness pinned to block `N` is admissible only while the node holds BALs for blocks `N+1` through the current head; if blocks before the node's earliest retained BAL fall between the witness anchor and the current head, the node cannot prove the dependencies stayed untouched and MUST treat the transaction as freshness-stale. Nodes SHOULD retain BAL coverage at least as deep as their accepted witness age. Wallets generating Class 4 witnesses SHOULD anchor to blocks recent enough that the corresponding BALs are widely retained.
 
-Recent roots create ordinary persistent storage under `RECENT_ROOT_ADDRESS`. Existing root sources overwrite at most `RECENT_ROOT_LENGTH` cells, while new root sources create additional cells. The natural pricing point for aggregate state growth is source creation, not recurring writes. Future versions MAY add a one-time source registration cost or first-write surcharge for each new `source_id`.
+The Class 4 freshness check assumes BAL completeness: every state mutation between the witness block and the current head MUST appear in BALs, including system-contract writes (recent-root entries, keyed-nonce consumption). Implementations MUST NOT exempt system-contract writes from BAL coverage; doing so produces a freshness false-positive where the witness is accepted despite a touched dependency.
+
+Class 4 transactions publicly declare their outside-VOPS dependencies. For applications wanting to keep their state-access pattern private, this is a deanonymization surface. Privacy spends SHOULD use Class 3 (recent root references plus keyed nonces, no declared dependencies) wherever possible. Class 4 is best suited to AA-style wallets reading their own ancillary state, where the dependency set is intrinsically public.
+
+Outside-VOPS dependencies on high-churn state are mempool-hostile under Class 4: every touch of a declared dependency forces the wallet to regenerate the witness and re-sign the envelope. Applications that route through public mempool channels SHOULD keep Class 4 dependency sets confined to low-churn state such as authorization roots, fee schedules, or governance-controlled parameters.
+
+Subjective filters such as Bloom filters over spent keys MAY be used for local mempool triage. They are not consensus validity and MUST NOT replace exact keyed-nonce checks, exact recent root reference checks, or exact witness verification during omission validation.
+
+Post-quantum signature or proof schemes are FOCIL-eligible under this profile only if their validation prefix fits `MAX_VERIFY_GAS_PER_TX` and `MAX_VERIFY_GAS_PER_IL`. Otherwise their omission is excused until aggregation or proof-verification costs change.
 
 ## Copyright
 
