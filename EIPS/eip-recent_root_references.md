@@ -164,7 +164,7 @@ storage[storage_key] = entry_hash
 
 The call follows normal EVM execution and gas accounting. A successful call returns zero bytes. The contract exposes no read operation.
 
-Each `(source_id, S)` has at most one referenceable root on the canonical chain. Multiple writes by the same source address and salt during slot `S` target the same storage key. If multiple writes are included, the final write in canonical block execution order overwrites earlier writes. Only that final root is referenceable beginning in slot `S + 1`. Applications MUST treat roots written during the current slot as tentative until the slot is complete.
+Each `(source_id, S)` has at most one referenceable root on the canonical chain. Multiple writes by the same source address and salt during slot `S` target the same storage key. If multiple writes are included, the final write in canonical block execution order overwrites earlier writes. Only that final root is referenceable beginning in slot `S + 1`.
 
 ### Transaction payload
 
@@ -254,11 +254,9 @@ Duplicate references are valid. They are checked, charged, and preserved indepen
 
 Each valid reference MUST add `RECENT_ROOT_ADDRESS` and its `storage_key` to the transaction's accessed address and storage-key sets. This affects warm/cold gas accounting only.
 
-For FOCIL omission checks, attesters evaluate recent root references against the reconstructed pre-state at the claimed transaction index in the claimed block, using `current_slot` from that block's timestamp.
+### Access lists
 
-### Access lists and witnesses
-
-Recent root writes are ordinary writes to `RECENT_ROOT_ADDRESS[storage_key]`. Block access lists, state-diff sidecars, witness profiles, and attester reconstruction mechanisms MUST represent them as ordinary storage writes.
+Recent root writes are ordinary writes to `RECENT_ROOT_ADDRESS[storage_key]`.
 
 ### Gas accounting
 
@@ -332,8 +330,6 @@ Nodes SHOULD admit a transaction to the public mempool only if all declared rece
 Nodes SHOULD NOT admit a transaction while any reference has `slot >= current_slot`. Nodes MAY evict a transaction with any reference where `current_slot - slot >= RECENT_ROOT_LENGTH`.
 
 Nodes SHOULD recheck pending transactions with recent root references when the head changes, when the node's current slot advances, or after any reorg that may affect referenced entries.
-
-Public mempool and FOCIL policies MAY require a larger minimum reference age than consensus validity. `current_slot - 1` references are consensus-valid but have the weakest propagation and reorg stability.
 
 ### Activation
 
