@@ -8,7 +8,7 @@ status: Draft
 type: Standards Track
 category: Core
 created: 2026-05-15
-requires: 8141
+requires: 7843, 8141
 ---
 
 ## Abstract
@@ -59,13 +59,9 @@ All concatenations below use fixed-length encodings. Domains are 32 bytes. Addre
 
 ### Current slot
 
-For block validation:
+For block validation, `current_slot` is the consensus slot of the beacon block that contains the execution payload being validated.
 
-```text
-current_slot = floor((block.timestamp - CONSENSUS_GENESIS_TIME) / SECONDS_PER_SLOT)
-```
-
-`CONSENSUS_GENESIS_TIME` and `SECONDS_PER_SLOT` are chain configuration values exposed to execution clients.
+Execution clients MUST obtain `current_slot` from the EIP-7843 `slotNumber` field. Clients MUST NOT derive `current_slot` from `block.timestamp` using a fixed slot duration.
 
 For transaction pool handling, `current_slot` is the node's current slot at receipt, recheck, or eviction time. It is local policy, not block validity.
 
@@ -227,7 +223,7 @@ Decoders MUST reject a post-fork frame transaction if any of the following is tr
 
 Within block execution, recent root references are checked after the EIP-8141 nonce check and before frame execution, against the transaction pre-state. The transaction pre-state includes all prior transactions in the same block.
 
-Competing blocks at the same slot may have different recent-root state, and a reference is valid only in a block whose transaction pre-state contains the referenced entry. `current_slot` is derived from that block's timestamp.
+Competing blocks at the same slot may have different recent-root state, and a reference is valid only in a block whose transaction pre-state contains the referenced entry. `current_slot` is the consensus slot of that block.
 
 A recent root reference `(source_id, slot, root)` is valid only if:
 
@@ -339,7 +335,7 @@ If `timestamp < FORK_TIMESTAMP`, clients MUST apply the pre-fork EIP-8141 `FRAME
 
 If `timestamp >= FORK_TIMESTAMP`, clients MUST apply the post-fork `FRAME_TX_TYPE` schema defined in this EIP.
 
-At activation, on the first execution payload with `timestamp >= FORK_TIMESTAMP` and before any transaction in that payload runs, clients MUST initialize `RECENT_ROOT_ADDRESS` with `RECENT_ROOT_CODE`, nonce 1, and empty storage, preserving any pre-existing balance.
+For every block `B` with `B.timestamp >= FORK_TIMESTAMP` whose parent has `parent.timestamp < FORK_TIMESTAMP`, clients MUST initialize `RECENT_ROOT_ADDRESS` against `B`'s parent state before executing any transaction in `B`.
 
 If `RECENT_ROOT_ADDRESS` does not exist, clients MUST create it with balance 0, nonce 1, code `RECENT_ROOT_CODE`, and empty storage.
 
@@ -347,7 +343,7 @@ If `RECENT_ROOT_ADDRESS` already exists with empty code and empty storage, clien
 
 The fork configuration MUST choose a `RECENT_ROOT_ADDRESS` with empty code and empty storage in the parent state of the first post-fork payload. If this condition is false at activation, the payload is invalid.
 
-This initialization runs exactly once at fork activation and MUST NOT be re-applied during normal chain progression after activation. Clients MUST handle reorgs across the fork boundary by applying or undoing this transition according to the canonical chain.
+For all other blocks, clients MUST NOT run this initialization. Clients MUST handle reorgs across the fork boundary by applying or undoing this transition according to the canonical chain.
 
 Pre-fork frame transactions and authorizations bound to the pre-fork canonical signature hash do not survive the boundary and MUST be evicted from mempools and regenerated.
 
@@ -363,7 +359,7 @@ References are limited to completed slots. During slot `S`, writes update index 
 
 No creation transaction is required. A root source is created implicitly when a source address first writes with a new `(source_address, salt)` pair. Each root source has a bounded rolling window. Aggregate storage grows linearly with the number of written root sources. State growth is paid incrementally by the writes that create storage entries.
 
-For validation and omission checks, each declared reference names exactly one storage key under `RECENT_ROOT_ADDRESS`.
+For validation checks, each declared reference names exactly one storage key under `RECENT_ROOT_ADDRESS`.
 
 `RECENT_ROOT_LENGTH = 8192` gives `RECENT_ROOT_USABLE_WINDOW = 8191`, because the current slot is not referenceable.
 
