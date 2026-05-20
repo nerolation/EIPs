@@ -2,7 +2,7 @@
 eip: TBD
 title: Recent Root References for Frame Transactions
 description: Frame transactions can declare verified recent roots
-author: Thomas Thiery (@soispoke)
+author: Thomas Thiery (@soispoke), Vitalik Buterin (@vbuterin)
 discussions-to: TBD
 status: Draft
 type: Standards Track
