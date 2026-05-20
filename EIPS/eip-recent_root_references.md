@@ -29,7 +29,7 @@ EIP-8141 validation must not read arbitrary storage controlled by another accoun
 
 Recent root references let a transaction explicitly name one recent root in its signed transaction envelope. Each reference maps to one system-contract storage key and can be checked before validation code runs.
 
-Privacy applications often keep a tree of commitments and prove spends against a recent tree root. With this EIP, the application writes a root for a completed slot, and spend transactions reference that root directly instead of reading the application's changing tree state during validation.
+Privacy applications often keep a tree of commitments and prove spends against a recent tree root. With this EIP, the application writes a root for a recent slot, and spend transactions reference that root directly instead of reading the application's changing tree state during validation.
 
 ## Specification
 
@@ -65,7 +65,7 @@ Execution clients MUST obtain `current_slot` from the EIP-7843 `slotNumber` fiel
 
 For transaction pool handling, `current_slot` is the node's current slot at receipt, recheck, or eviction time. It is local policy, not block validity.
 
-References MUST target completed slots. A root written during slot `S` becomes referenceable beginning in slot `S + 1`.
+References MUST target slots strictly before `current_slot`. A root written during slot `S` becomes referenceable beginning in slot `S + 1`.
 
 ### Root sources
 
@@ -355,7 +355,7 @@ Recent root references provide a narrow exception. The root is declared in the s
 
 Each stored entry commits to the root source, slot, and root. This prevents an old root at the same array index, or a root from another root source, from satisfying a reference.
 
-References are limited to completed slots. During slot `S`, writes update index `S mod RECENT_ROOT_LENGTH`, but references to `S` are invalid and references old enough to share that index are expired. Current-slot writes therefore cannot invalidate currently valid references.
+References are limited to slots strictly before `current_slot`. During slot `S`, writes update index `S mod RECENT_ROOT_LENGTH`, but references to `S` are invalid and references old enough to share that index are expired. Current-slot writes therefore cannot invalidate currently valid references.
 
 No creation transaction is required. A root source is created implicitly when a source address first writes with a new `(source_address, salt)` pair. Each root source has a bounded rolling window. Aggregate storage grows linearly with the number of written root sources. State growth is paid incrementally by the writes that create storage entries.
 
