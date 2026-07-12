@@ -1,0 +1,56 @@
+;;; UTXO vault -- deposits create UTXOs.
+;;;
+;;; Calldata is the 20-byte recipient address. The call must carry a
+;;; non-zero value and name a non-zero recipient; anything else reverts.
+;;; The vault assigns the next index, emits UtxoCreated, and keeps the
+;;; deposited value. All other vault state is written by the protocol.
+
+#define utxoCreatedTopic = keccak256("UtxoCreated(address,address,uint64,uint256)")
+
+        ;; recipient = calldata[0:20]
+        push0               ; [0]
+        calldataload        ; [recipient<<96]
+        push 96             ; [96, recipient<<96]
+        shr                 ; [recipient]
+
+        ;; require calldatasize == 20 and callvalue != 0 and recipient != 0
+        dup1                ; [recipient, recipient]
+        iszero              ; [recipient==0, recipient]
+        push 20             ; [20, recipient==0, recipient]
+        calldatasize        ; [cds, 20, recipient==0, recipient]
+        eq                  ; [cds==20, recipient==0, recipient]
+        iszero              ; [cds!=20, recipient==0, recipient]
+        or                  ; [bad, recipient]
+        callvalue           ; [value, bad, recipient]
+        iszero              ; [value==0, bad, recipient]
+        or                  ; [bad, recipient]
+        jumpi @fail         ; [recipient]
+
+        ;; index = sload(0); sstore(0, index + 1)
+        push0               ; [0, recipient]
+        sload               ; [index, recipient]
+        dup1                ; [index, index, recipient]
+        push 1              ; [1, index, index, recipient]
+        add                 ; [index+1, index, recipient]
+        push0               ; [0, index+1, index, recipient]
+        sstore              ; [index, recipient]
+
+        ;; log data = index ++ value
+        push0               ; [0, index, recipient]
+        mstore              ; [recipient]
+        callvalue           ; [value, recipient]
+        push 32             ; [32, value, recipient]
+        mstore              ; [recipient]
+
+        ;; emit UtxoCreated(source=caller, recipient, index, value)
+        caller              ; [caller, recipient]
+        push utxoCreatedTopic ; [topic, caller, recipient]
+        push 64             ; [64, topic, caller, recipient]
+        push0               ; [0, 64, topic, caller, recipient]
+        log3                ; []
+        stop
+
+fail:
+        push0               ; [0, recipient]
+        push0               ; [0, 0, recipient]
+        revert
