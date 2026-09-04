@@ -1,0 +1,154 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "PiNexusQuantumBodyV2",
+  "version": "2.0.0",
+  "description": "Schema + seeded demo dataset for the Pi-Nexus quantum-resistant multi-chain transaction engine.",
+  "supported_chains": [
+    "ethereum",
+    "solana",
+    "pi-network",
+    "stellar-soroban"
+  ],
+  "crypto": {
+    "signature_scheme": "lamport-ots-sha256",
+    "hash_function": "sha256",
+    "commitment_tree": "merkle-binary-sha256",
+    "quantum_resistance_basis": "Security reduces to SHA-256 preimage resistance, which is not broken by Shor's algorithm (unlike ECDSA/secp256k1 used natively by Ethereum/Solana/Stellar). Each OTS keypair is single-use; pools are Merkle-aggregated into one reusable quantum address."
+  },
+  "chain_config": {
+    "ethereum": {
+      "unit": "wei-gwei-scaled",
+      "rpc_method": "eth_sendRawTransaction",
+      "explorer": "https://etherscan.io/tx/"
+    },
+    "solana": {
+      "unit": "lamports",
+      "rpc_method": "sendTransaction",
+      "explorer": "https://explorer.solana.com/tx/"
+    },
+    "pi-network": {
+      "unit": "pi-stroops",
+      "rpc_method": "horizon.submit_transaction",
+      "explorer": "https://explorepi.app/tx/"
+    },
+    "stellar-soroban": {
+      "unit": "stroops",
+      "rpc_method": "soroban.simulate_and_submit",
+      "explorer": "https://stellar.expert/explorer/public/tx/"
+    }
+  },
+  "transaction_schema": {
+    "type": "object",
+    "required": [
+      "tx_id",
+      "chain",
+      "from_quantum_addr",
+      "to_address",
+      "amount_micro",
+      "nonce",
+      "timestamp_unix",
+      "leaf_index"
+    ],
+    "properties": {
+      "tx_id": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{64}$"
+      },
+      "chain": {
+        "enum": [
+          "ethereum",
+          "solana",
+          "pi-network",
+          "stellar-soroban"
+        ]
+      },
+      "from_quantum_addr": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{64}$",
+        "description": "Merkle root commitment of the OTS keypair pool"
+      },
+      "to_address": {
+        "type": "string"
+      },
+      "amount_micro": {
+        "type": "integer",
+        "minimum": 0
+      },
+      "nonce": {
+        "type": "integer",
+        "minimum": 0
+      },
+      "timestamp_unix": {
+        "type": "integer"
+      },
+      "leaf_index": {
+        "type": "integer",
+        "minimum": 0
+      }
+    }
+  },
+  "seeded_demo": {
+    "genesis_seed": 2025072607,
+    "pool_size_per_identity": 8,
+    "generated_by": "quantum_body_v2.py::run_demo()",
+    "data": {
+      "engine": "pi-nexus-quantum-body-v2 (python)",
+      "transactions": [
+        {
+          "quantum_address": "b6401f62b4d37e1e092a5e6284b6bfe57d367497d892e241a4ad6024ca449f1b",
+          "quantum_signature_valid": true,
+          "tx_id": "36c3cbf859a3b0c1ee1675b9602a43a700e287dcd525d7687a3d5bb55067f2f3",
+          "chain": "pi-network",
+          "from_quantum_addr": "b6401f62b4d37e1e092a5e6284b6bfe57d367497d892e241a4ad6024ca449f1b",
+          "to_address": "GBPI...QNTM01",
+          "amount_micro": 1000000,
+          "nonce": 0,
+          "timestamp_unix": 1788410794,
+          "leaf_index": 0
+        },
+        {
+          "quantum_address": "5c07dfe5974e6a99b8f4cd105f37cdcfbe80ff9cd05f13aa1d475b7151dcf3cf",
+          "quantum_signature_valid": true,
+          "tx_id": "43fef5eb79661d855df922e0e95e23e6beaf0aa2e49d628387b58a77ee3d810f",
+          "chain": "stellar-soroban",
+          "from_quantum_addr": "5c07dfe5974e6a99b8f4cd105f37cdcfbe80ff9cd05f13aa1d475b7151dcf3cf",
+          "to_address": "CSOR...QNTM02",
+          "amount_micro": 250000,
+          "nonce": 0,
+          "timestamp_unix": 1788410794,
+          "leaf_index": 0
+        },
+        {
+          "quantum_address": "4bf575e31c24536863cd05f09353738a18d0b01823ce42b1573314403faa9979",
+          "quantum_signature_valid": true,
+          "tx_id": "a68840726af7692f0bfebcb8c0956b5e261051481148119b8c15a0963e8fcbe2",
+          "chain": "ethereum",
+          "from_quantum_addr": "4bf575e31c24536863cd05f09353738a18d0b01823ce42b1573314403faa9979",
+          "to_address": "0xA1b2C3d4E5F6a7B8c9D0e1F2A3b4C5d6E7f8A9b0",
+          "amount_micro": 5000000,
+          "nonce": 0,
+          "timestamp_unix": 1788410794,
+          "leaf_index": 0
+        },
+        {
+          "quantum_address": "e3277c573d146cb295c9740bab590e10a0e556baef02c7dc7d976e4dcd759b7d",
+          "quantum_signature_valid": true,
+          "tx_id": "8aeb73af3cf5736c69bfd9a8f7f6429c7837cdd0c5da744dc1d7ec7d57152892",
+          "chain": "solana",
+          "from_quantum_addr": "e3277c573d146cb295c9740bab590e10a0e556baef02c7dc7d976e4dcd759b7d",
+          "to_address": "9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM",
+          "amount_micro": 750000,
+          "nonce": 0,
+          "timestamp_unix": 1788410794,
+          "leaf_index": 0
+        }
+      ],
+      "block": {
+        "height": 1,
+        "tx_count": 4,
+        "merkle_root": "318f544a9263a1cbbdbf7aa7e77317f8496930e55f5d27e6a8261ae8cee51989",
+        "block_hash": "379885a382fb0ff46d91b30fa2794f1a203fdde4ef73f68b0b1dff33d7c224e3"
+      }
+    }
+  }
+}

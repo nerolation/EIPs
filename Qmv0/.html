@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pi-Nexus Quantum Body v2</title>
+<style>
+  :root{
+    --bg:#05060a; --panel:#0d1018; --panel2:#11151f; --border:#1e2433;
+    --accent:#7c5cff; --accent2:#22d3c8; --text:#e7e9f2; --dim:#8a90a6;
+    --good:#2fd889; --bad:#ff5d7a; --mono:'JetBrains Mono','SFMono-Regular',Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:radial-gradient(circle at 20% -10%,#151a2e 0%,var(--bg) 55%);
+    color:var(--text);font-family:'Inter',system-ui,-apple-system,sans-serif;min-height:100vh}
+  header{padding:28px 32px 18px;border-bottom:1px solid var(--border)}
+  .brand{display:flex;align-items:center;gap:14px}
+  .logo-dot{width:34px;height:34px;border-radius:9px;background:linear-gradient(135deg,var(--accent),var(--accent2));
+    display:flex;align-items:center;justify-content:center;font-weight:700;font-family:var(--mono);font-size:14px;color:#05060a}
+  h1{font-size:19px;margin:0;letter-spacing:.2px}
+  .sub{color:var(--dim);font-size:12.5px;margin-top:2px;font-family:var(--mono)}
+  nav{display:flex;gap:6px;padding:14px 32px 0;border-bottom:1px solid var(--border)}
+  nav button{background:none;border:none;color:var(--dim);padding:10px 16px;font-size:13.5px;
+    cursor:pointer;border-bottom:2px solid transparent;font-family:inherit}
+  nav button.active{color:var(--text);border-bottom-color:var(--accent)}
+  main{padding:26px 32px 60px;max-width:1180px;margin:0 auto}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:14px;margin-bottom:22px}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:18px}
+  .card h3{margin:0 0 10px;font-size:13px;color:var(--dim);text-transform:uppercase;letter-spacing:.6px;font-weight:600}
+  .chain-pill{display:inline-flex;align-items:center;gap:6px;font-family:var(--mono);font-size:11.5px;
+    background:var(--panel2);border:1px solid var(--border);padding:4px 10px;border-radius:999px;margin:3px 4px 0 0}
+  .chain-pill .dot{width:6px;height:6px;border-radius:50%}
+  section{display:none} section.active{display:block}
+  .kv{font-family:var(--mono);font-size:12.5px;color:var(--dim);display:flex;justify-content:space-between;
+    padding:6px 0;border-bottom:1px dashed var(--border)}
+  .kv b{color:var(--text);font-weight:500}
+  table{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:12px}
+  th{text-align:left;color:var(--dim);font-weight:500;padding:8px 10px;border-bottom:1px solid var(--border)}
+  td{padding:8px 10px;border-bottom:1px solid var(--border);color:var(--text)}
+  .valid{color:var(--good)} .invalid{color:var(--bad)}
+  .badge{padding:2px 8px;border-radius:6px;font-size:11px}
+  .badge.good{background:rgba(47,216,137,.12);color:var(--good)}
+  .btn{background:linear-gradient(135deg,var(--accent),#5a3fd6);color:#fff;border:none;padding:10px 16px;
+    border-radius:8px;font-size:13px;cursor:pointer;font-weight:600}
+  .btn.ghost{background:var(--panel2);border:1px solid var(--border);color:var(--text)}
+  input,select{background:var(--panel2);border:1px solid var(--border);color:var(--text);padding:9px 11px;
+    border-radius:8px;font-family:var(--mono);font-size:12.5px;width:100%}
+  label{font-size:11.5px;color:var(--dim);display:block;margin-bottom:5px;font-family:var(--mono)}
+  .row{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px}
+  pre{background:#000;border:1px solid var(--border);border-radius:10px;padding:14px;font-size:11.5px;
+    overflow:auto;max-height:340px;color:#8ef2c9;font-family:var(--mono);line-height:1.5}
+  .log{color:var(--dim);font-size:12px;font-family:var(--mono);margin-top:10px}
+  .flex{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  footer{text-align:center;color:var(--dim);font-size:11.5px;padding:24px;font-family:var(--mono)}
+  a{color:var(--accent2)}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <div class="logo-dot">Q</div>
+    <div>
+      <h1>Pi-Nexus Quantum Body v2</h1>
+      <div class="sub">Lamport-OTS + Merkle multi-chain transaction engine — Ethereum · Solana · Pi Network · Stellar/Soroban</div>
+    </div>
+  </div>
+</header>
+
+<nav>
+  <button class="active" data-tab="overview">Overview</button>
+  <button data-tab="demo">Seeded Demo</button>
+  <button data-tab="live">Live Quantum Signer</button>
+  <button data-tab="api">API Console</button>
+</nav>
+
+<main>
+
+  <section id="overview" class="active">
+    <div class="grid">
+      <div class="card">
+        <h3>Signature scheme</h3>
+        <div class="kv"><span>Scheme</span><b>Lamport OTS (SHA-256)</b></div>
+        <div class="kv"><span>Aggregation</span><b>Binary Merkle tree</b></div>
+        <div class="kv"><span>Resistance basis</span><b>SHA-256 preimage</b></div>
+        <div class="kv"><span>Broken by Shor's?</span><b style="color:var(--good)">No</b></div>
+      </div>
+      <div class="card">
+        <h3>Supported chains</h3>
+        <span class="chain-pill"><span class="dot" style="background:#627eea"></span>ethereum</span>
+        <span class="chain-pill"><span class="dot" style="background:#9945ff"></span>solana</span>
+        <span class="chain-pill"><span class="dot" style="background:#facc15"></span>pi-network</span>
+        <span class="chain-pill"><span class="dot" style="background:#22d3c8"></span>stellar-soroban</span>
+      </div>
+      <div class="card">
+        <h3>Reference implementations</h3>
+        <div class="kv"><span>Core engine</span><b>quantum_body_v2.hpp / .cpp</b></div>
+        <div class="kv"><span>Engine + API</span><b>quantum_body_v2.py / api_blockchain.py</b></div>
+        <div class="kv"><span>Schema + demo</span><b>quantum_body_v2.json</b></div>
+        <div class="kv"><span>Trading bridge</span><b>quantum_body_v2.mq5</b></div>
+      </div>
+    </div>
+    <div class="card">
+      <h3>How it works</h3>
+      <p style="color:var(--dim);font-size:13px;line-height:1.7">
+        Each quantum identity pre-generates a pool of one-time Lamport keypairs (256 secret/public bit-pairs each,
+        derived deterministically from a seed). The public halves are hashed into per-keypair commitments, which are
+        leaves of a binary Merkle tree — the tree root is the reusable <b>quantum address</b>. To send a transaction,
+        one unused leaf is consumed: the 256-bit message hash is signed by revealing one secret per bit, producing a
+        signature that is provably unforgeable without the private pool, and independently verifiable against the
+        public Merkle root via an inclusion proof. This mirrors the same "many-time from one-time" trick used by
+        stateful hash-based post-quantum schemes (XMSS/SPHINCS+), implemented from scratch in C++, Python, and
+        JavaScript here, and projected onto Ethereum, Solana, Pi Network, and Stellar/Soroban via pluggable chain
+        adapters.
+      </p>
+    </div>
+  </section>
+
+  <section id="demo">
+    <div class="card">
+      <h3>Seeded demo transactions <span style="color:var(--dim);font-weight:400">(genesis_seed = 2025072607)</span></h3>
+      <table id="demoTable">
+        <thead><tr><th>Chain</th><th>Quantum Address</th><th>To</th><th>Amount</th><th>Signature</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <div class="card">
+      <h3>Sealed block</h3>
+      <div class="kv"><span>Height</span><b>1</b></div>
+      <div class="kv"><span>Tx count</span><b>4</b></div>
+      <div class="kv"><span>Merkle root</span><b id="blkRoot">—</b></div>
+      <div class="kv"><span>Block hash</span><b id="blkHash">—</b></div>
+    </div>
+  </section>
+
+  <section id="live">
+    <div class="card">
+      <h3>Generate a quantum identity &amp; sign a transaction — entirely in your browser</h3>
+      <p style="color:var(--dim);font-size:12.5px;margin-top:-4px">
+        Runs the same Lamport-OTS + Merkle construction as the C++/Python engines, using
+        <code>crypto.subtle.digest('SHA-256', …)</code>. Nothing leaves this page.
+      </p>
+      <div class="row">
+        <div>
+          <label>Chain</label>
+          <select id="liveChain">
+            <option value="pi-network">pi-network</option>
+            <option value="stellar-soroban">stellar-soroban</option>
+            <option value="ethereum">ethereum</option>
+            <option value="solana">solana</option>
+          </select>
+        </div>
+        <div>
+          <label>Pool size</label>
+          <input id="livePool" value="8" />
+        </div>
+      </div>
+      <div class="row">
+        <div>
+          <label>To address</label>
+          <input id="liveTo" value="GDEMO...RECEIVER" />
+        </div>
+        <div>
+          <label>Amount (micro-units)</label>
+          <input id="liveAmount" value="42000" />
+        </div>
+      </div>
+      <div class="flex">
+        <button class="btn" onclick="createIdentityAndSend()">Generate identity + sign tx</button>
+        <button class="btn ghost" onclick="document.getElementById('liveOut').textContent=''">Clear</button>
+      </div>
+      <div class="log" id="liveStatus"></div>
+      <pre id="liveOut"></pre>
+    </div>
+  </section>
+
+  <section id="api">
+    <div class="card">
+      <h3>API Console</h3>
+      <p style="color:var(--dim);font-size:12.5px;margin-top:-4px">
+        Point this at a running <code>api_blockchain.py</code> instance (default <code>http://127.0.0.1:8000</code>).
+      </p>
+      <div class="row">
+        <div>
+          <label>API base URL</label>
+          <input id="apiBase" value="http://127.0.0.1:8000" />
+        </div>
+        <div>
+          <label>Endpoint</label>
+          <select id="apiEndpoint">
+            <option value="/">/  (info)</option>
+            <option value="/chains">/chains</option>
+            <option value="/demo">/demo</option>
+          </select>
+        </div>
+      </div>
+      <div class="flex">
+        <button class="btn" onclick="callApi()">Send request</button>
+      </div>
+      <div class="log" id="apiStatus"></div>
+      <pre id="apiOut"></pre>
+    </div>
+  </section>
+
+</main>
+
+<footer>Pi-Nexus Quantum Body v2 · educational hash-based post-quantum reference implementation · not audited, not production cryptography</footer>
+
+<script>
+// ---------------------------------------------------------------------
+// Minimal browser-side Lamport OTS + Merkle port (mirrors quantum_body_v2.py)
+// ---------------------------------------------------------------------
+const enc = new TextEncoder();
+
+function toHex(buf){ return [...new Uint8Array(buf)].map(b=>b.toString(16).padStart(2,'0')).join(''); }
+function concatBytes(...arrs){
+  const total = arrs.reduce((n,a)=>n+a.length,0);
+  const out = new Uint8Array(total); let off=0;
+  for(const a of arrs){ out.set(a,off); off+=a.length; } return out;
+}
+async function sha256(bytes){ return new Uint8Array(await crypto.subtle.digest('SHA-256', bytes)); }
+
+function u64be(n){
+  const b = new Uint8Array(8);
+  let big = BigInt(n);
+  for(let i=7;i>=0;i--){ b[i]=Number(big & 0xffn); big >>= 8n; }
+  return b;
+}
+
+async function lamportKeygen(seed){
+  const secret=[], pub=[];
+  let counter=0;
+  for(let i=0;i<256;i++){
+    const sPair=[], pPair=[];
+    for(let j=0;j<2;j++){
+      const s = await sha256(concatBytes(seed, u64be(counter++)));
+      const p = await sha256(s);
+      sPair.push(s); pPair.push(p);
+    }
+    secret.push(sPair); pub.push(pPair);
+  }
+  return {secret, pub};
+}
+
+function bit(hash, i){ return (hash[Math.floor(i/8)] >> (7-(i%8))) & 1; }
+
+async function lamportSign(kp, msgHash){
+  const sig=[];
+  for(let i=0;i<256;i++) sig.push(kp.secret[i][bit(msgHash,i)]);
+  return sig;
+}
+async function lamportVerify(pub, msgHash, sig){
+  for(let i=0;i<256;i++){
+    const h = await sha256(sig[i]);
+    if(toHex(h) !== toHex(pub[i][bit(msgHash,i)])) return false;
+  }
+  return true;
+}
+async function pubKeyCommitment(pub){
+  const parts=[]; for(const pair of pub) for(const h of pair) parts.push(h);
+  return await sha256(concatBytes(...parts));
+}
+async function merkleBuild(leaves){
+  let level = leaves;
+  const levels=[level];
+  while(level.length>1){
+    const next=[];
+    for(let i=0;i<level.length;i+=2){
+      if(i+1<level.length) next.push(await sha256(concatBytes(level[i], level[i+1])));
+      else next.push(await sha256(concatBytes(level[i], level[i])));
+    }
+    level = next; levels.push(level);
+  }
+  return {root: level[0], levels};
+}
+function merkleProof(levels, index){
+  const path=[]; let idx=index;
+  for(let l=0;l<levels.length-1;l++){
+    const level = levels[l];
+    let sib = idx%2===0 ? idx+1 : idx-1;
+    if(sib>=level.length) sib=idx;
+    path.push(level[sib]); idx = Math.floor(idx/2);
+  }
+  return path;
+}
+async function merkleVerify(root, leaf, index, proof){
+  let cur = leaf, idx=index;
+  for(const sib of proof){
+    cur = idx%2===0 ? await sha256(concatBytes(cur, sib)) : await sha256(concatBytes(sib, cur));
+    idx = Math.floor(idx/2);
+  }
+  return toHex(cur) === toHex(root);
+}
+
+async function createIdentityAndSend(){
+  const statusEl = document.getElementById('liveStatus');
+  const out = document.getElementById('liveOut');
+  statusEl.textContent = 'generating quantum identity…';
+  const chain = document.getElementById('liveChain').value;
+  const poolSize = Math.min(256, Math.max(1, parseInt(document.getElementById('livePool').value) || 8));
+  const to = document.getElementById('liveTo').value;
+  const amount = Math.max(0, parseInt(document.getElementById('liveAmount').value) || 0);
+
+  const genesisSeed = await sha256(enc.encode('browser-' + Date.now()));
+  const keypairs=[], commitments=[];
+  for(let i=0;i<poolSize;i++){
+    const seed = await sha256(concatBytes(genesisSeed, u64be(i)));
+    const kp = await lamportKeygen(seed);
+    keypairs.push(kp);
+    commitments.push(await pubKeyCommitment(kp.pub));
+  }
+  const tree = await merkleBuild(commitments);
+  const quantumAddr = toHex(tree.root);
+
+  statusEl.textContent = 'signing transaction with leaf #0…';
+  const payload = `${quantumAddr}|${to}|${amount}|0|${Math.floor(Date.now()/1000)}|${chain}`;
+  const msgHash = await sha256(enc.encode(payload));
+  const sig = await lamportSign(keypairs[0], msgHash);
+  const proof = merkleProof(tree.levels, 0);
+
+  statusEl.textContent = 'verifying signature + merkle inclusion…';
+  const sigOk = await lamportVerify(keypairs[0].pub, msgHash, sig);
+  const merkleOk = await merkleVerify(tree.root, commitments[0], 0, proof);
+
+  statusEl.innerHTML = (sigOk && merkleOk)
+    ? '<span class="valid">✓ quantum signature valid, merkle proof valid</span>'
+    : '<span class="invalid">✗ verification failed</span>';
+
+  out.textContent = JSON.stringify({
+    chain, quantum_address: quantumAddr, to_address: to, amount_micro: amount,
+    tx_id: toHex(msgHash), leaf_index: 0, pool_size: poolSize,
+    signature_valid: sigOk, merkle_proof_valid: merkleOk
+  }, null, 2);
+}
+
+async function callApi(){
+  const base = document.getElementById('apiBase').value.replace(/\/$/,'');
+  const ep = document.getElementById('apiEndpoint').value;
+  const statusEl = document.getElementById('apiStatus');
+  const out = document.getElementById('apiOut');
+  statusEl.textContent = 'requesting ' + base + ep + ' …';
+  try{
+    const res = await fetch(base + ep);
+    const json = await res.json();
+    statusEl.innerHTML = '<span class="' + (res.ok ? 'valid' : 'invalid') + '">' + (res.ok ? '✓' : '✗') + ' ' + res.status + '</span>';
+    out.textContent = JSON.stringify(json, null, 2);
+  }catch(e){
+statusEl.textContent = '✗ request failed — is the API running and CORS-enabled? (' + e.message + ')';
+    out.textContent = '';
+  }
+}
+
+// ---------------------------------------------------------------------
+// Tabs
+// ---------------------------------------------------------------------
+document.querySelectorAll('nav button').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    document.querySelectorAll('nav button').forEach(b=>b.classList.remove('active'));
+    document.querySelectorAll('main section').forEach(s=>s.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById(btn.dataset.tab).classList.add('active');
+  });
+});
+
+// ---------------------------------------------------------------------
+// Seeded demo table (static snapshot mirroring quantum_body_v2.json)
+// ---------------------------------------------------------------------
+const seededDemo = {"engine": "pi-nexus-quantum-body-v2 (python)", "transactions": [{"quantum_address": "b6401f62b4d37e1e092a5e6284b6bfe57d367497d892e241a4ad6024ca449f1b", "quantum_signature_valid": true, "tx_id": "36c3cbf859a3b0c1ee1675b9602a43a700e287dcd525d7687a3d5bb55067f2f3", "chain": "pi-network", "from_quantum_addr": "b6401f62b4d37e1e092a5e6284b6bfe57d367497d892e241a4ad6024ca449f1b", "to_address": "GBPI...QNTM01", "amount_micro": 1000000, "nonce": 0, "timestamp_unix": 1788410794, "leaf_index": 0}, {"quantum_address": "5c07dfe5974e6a99b8f4cd105f37cdcfbe80ff9cd05f13aa1d475b7151dcf3cf", "quantum_signature_valid": true, "tx_id": "43fef5eb79661d855df922e0e95e23e6beaf0aa2e49d628387b58a77ee3d810f", "chain": "stellar-soroban", "from_quantum_addr": "5c07dfe5974e6a99b8f4cd105f37cdcfbe80ff9cd05f13aa1d475b7151dcf3cf", "to_address": "CSOR...QNTM02", "amount_micro": 250000, "nonce": 0, "timestamp_unix": 1788410794, "leaf_index": 0}, {"quantum_address": "4bf575e31c24536863cd05f09353738a18d0b01823ce42b1573314403faa9979", "quantum_signature_valid": true, "tx_id": "a68840726af7692f0bfebcb8c0956b5e261051481148119b8c15a0963e8fcbe2", "chain": "ethereum", "from_quantum_addr": "4bf575e31c24536863cd05f09353738a18d0b01823ce42b1573314403faa9979", "to_address": "0xA1b2C3d4E5F6a7B8c9D0e1F2A3b4C5d6E7f8A9b0", "amount_micro": 5000000, "nonce": 0, "timestamp_unix": 1788410794, "leaf_index": 0}, {"quantum_address": "e3277c573d146cb295c9740bab590e10a0e556baef02c7dc7d976e4dcd759b7d", "quantum_signature_valid": true, "tx_id": "8aeb73af3cf5736c69bfd9a8f7f6429c7837cdd0c5da744dc1d7ec7d57152892", "chain": "solana", "from_quantum_addr": "e3277c573d146cb295c9740bab590e10a0e556baef02c7dc7d976e4dcd759b7d", "to_address": "9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM", "amount_micro": 750000, "nonce": 0, "timestamp_unix": 1788410794, "leaf_index": 0}], "block": {"height": 1, "tx_count": 4, "merkle_root": "318f544a9263a1cbbdbf7aa7e77317f8496930e55f5d27e6a8261ae8cee51989", "block_hash": "379885a382fb0ff46d91b30fa2794f1a203fdde4ef73f68b0b1dff33d7c224e3"}};
+
+function renderDemo(){
+  const tbody = document.querySelector('#demoTable tbody');
+  for(const tx of seededDemo.transactions){
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${tx.chain}</td>
+      <td>${tx.from_quantum_addr.slice(0,14)}…</td>
+      <td>${tx.to_address}</td>
+      <td>${tx.amount_micro.toLocaleString()}</td>
+      <td><span class="badge good">${tx.quantum_signature_valid ? 'valid' : 'invalid'}</span></td>`;
+    tbody.appendChild(tr);
+  }
+  document.getElementById('blkRoot').textContent = seededDemo.block.merkle_root.slice(0,24) + '…';
+  document.getElementById('blkHash').textContent = seededDemo.block.block_hash.slice(0,24) + '…';
+}
+renderDemo();
+</script>
+
+</body>
+</html>
