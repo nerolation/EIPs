@@ -40,6 +40,7 @@ from execution_testing import (
     TransactionReceipt,
     compute_create_address,
 )
+from execution_testing.checklists import EIPChecklist
 
 from ...prague.eip7702_set_code_tx.spec import Spec as Spec7702
 from .helpers import EOA_INITIAL_BALANCE
@@ -51,6 +52,8 @@ REFERENCE_SPEC_VERSION = ref_spec_2780.version
 pytestmark = pytest.mark.valid_from("Amsterdam")
 
 
+@EIPChecklist.GasCostChanges.Test.OutOfGas()
+@EIPChecklist.GasCostChanges.Test.GasUpdatesMeasurement()
 @pytest.mark.parametrize("outcome", ["oog", "success"])
 def test_top_frame_state_charge(
     fork: Fork,
@@ -63,9 +66,9 @@ def test_top_frame_state_charge(
     so the top-frame fires the ``NEW_ACCOUNT`` state-gas charge.
 
     - ``oog``: gas limit is one short of covering the state charge.
-      The transaction passes the intrinsic check, enters
-      ``process_message``, and out-of-gases on
-      ``charge_state_gas(NEW_ACCOUNT)`` before any EVM bytecode runs.
+      The transaction passes the intrinsic check, enters the top-frame
+      preparation in ``create_evm``, and out-of-gases on the
+      ``NEW_ACCOUNT`` state charge before any EVM bytecode runs.
       The sender pays the full ``gas_limit`` and no value is
       transferred.
     - ``success``: gas limit covers the state charge. The value
@@ -119,6 +122,7 @@ def test_top_frame_state_charge(
     state_test(pre=pre, tx=tx, post=post)
 
 
+@EIPChecklist.GasCostChanges.Test.OutOfGas()
 def test_top_frame_state_charge_empty_precompile(
     fork: Fork,
     pre: Alloc,
@@ -173,6 +177,7 @@ def test_top_frame_state_charge_empty_precompile(
     state_test(pre=pre, tx=tx, post=post)
 
 
+@EIPChecklist.GasCostChanges.Test.GasUpdatesMeasurement()
 def test_top_frame_new_account_charged_as_state_gas(
     fork: Fork,
     pre: Alloc,
@@ -245,6 +250,7 @@ def test_top_frame_new_account_charged_as_state_gas(
     )
 
 
+@EIPChecklist.GasCostChanges.Test.GasUpdatesMeasurement()
 @pytest.mark.pre_alloc_mutable
 def test_top_frame_new_account_skipped_for_nonce_only_recipient(
     fork: Fork,
@@ -324,6 +330,7 @@ def creation_tx_init_code(fork: Fork) -> tuple[Bytecode, int]:
     return init_code, init_code.gas_cost(fork)
 
 
+@EIPChecklist.GasCostChanges.Test.GasUpdatesMeasurement()
 @pytest.mark.parametrize(
     "value",
     [
@@ -342,10 +349,10 @@ def test_top_frame_new_account_skipped_for_prefunded_create_target(
     holds a balance does not incur the top-frame ``NEW_ACCOUNT`` state
     charge.
 
-    The create branch of ``prepare_dispatch`` keys the charge on the
+    The create branch of ``create_evm`` keys the charge on the
     *transaction pre-state* being empty — a live check would always see
-    the account, because ``process_create_message`` bumps the target's
-    nonce before dispatch. Pre-funding the create address makes the
+    the account, because ``process_create`` bumps the target's nonce
+    before dispatch. Pre-funding the create address makes the
     pre-state leaf non-empty, so the charge must be skipped; a
     balance-only leaf does not trigger the create-collision check
     (only nonce or code do), so the deployment still succeeds.
@@ -408,6 +415,7 @@ def test_top_frame_new_account_skipped_for_prefunded_create_target(
     state_test(pre=pre, tx=tx, post=post)
 
 
+@EIPChecklist.GasCostChanges.Test.GasUpdatesMeasurement()
 @pytest.mark.parametrize(
     "value",
     [
@@ -527,6 +535,8 @@ def test_top_frame_new_account_skipped_for_create_target_funded_same_block(
     )
 
 
+@EIPChecklist.GasCostChanges.Test.OutOfGas()
+@EIPChecklist.GasCostChanges.Test.GasUpdatesMeasurement()
 @pytest.mark.parametrize("outcome", ["oog", "success", "evm_reverts"])
 @pytest.mark.parametrize(
     "value",
@@ -624,6 +634,7 @@ def test_top_frame_execution_charge(
     state_test(pre=pre, tx=tx, post=post)
 
 
+@EIPChecklist.GasCostChanges.Test.GasUpdatesMeasurement()
 @pytest.mark.parametrize(
     "beneficiary_kind",
     [
@@ -741,6 +752,7 @@ def test_initcode_selfdestruct_keeps_top_frame_state_charge(
     state_test(pre=pre, tx=tx, post=post)
 
 
+@EIPChecklist.GasCostChanges.Test.GasUpdatesMeasurement()
 def test_initcode_selfdestruct_state_gas_in_header(
     fork: Fork,
     pre: Alloc,
@@ -822,6 +834,7 @@ class TopFrameFailureMode(Enum):
     DELEGATED_EXECUTION_OOG = auto()
 
 
+@EIPChecklist.GasCostChanges.Test.OutOfGas()
 @pytest.mark.parametrize(
     "failure_mode",
     [
